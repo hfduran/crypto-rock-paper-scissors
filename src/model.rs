@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Play {
     Rock,
@@ -31,14 +31,18 @@ impl Play {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type", content = "data", rename_all = "lowercase")]
 pub enum Message {
-    Play { play: Play },
     HashedPlay(String),
+    Explanation {
+        play: Play,
+        nonce: String,
+    },
     Ack(String),
 }
 
 pub trait ToJson: Serialize {
     fn to_json_str(&self) -> Result<String, serde_json::Error> {
-        serde_json::to_string(self)
+        let message = serde_json::to_string(self)?;
+        Ok(format!("{}\n", message))
     }
 }
 
