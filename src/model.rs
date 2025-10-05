@@ -29,9 +29,10 @@ impl Play {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "lowercase")]
+#[serde(tag = "type", content = "data", rename_all = "lowercase")]
 pub enum Message {
     Play { play: Play },
+    HashedPlay(String),
     Ack(String),
 }
 

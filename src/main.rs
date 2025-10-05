@@ -5,7 +5,7 @@ mod model;
 use crate::{
     cli::{get_mode_input, get_play_input, print_hello},
     crypto::{create_nonce, hash_play},
-    model::Mode,
+    model::{FromJson, Message, Mode, Play, ToJson},
 };
 use anyhow::Result;
 use std::{
@@ -56,6 +56,8 @@ fn game_start(mut stream: TcpStream) -> Result<()> {
             match line {
                 Ok(msg) => {
                     println!("\nThem: {}", msg);
+                    let message = Message::from_json_str(&msg).unwrap();
+                    println!("{message:?}");
                     io::stdout().flush().unwrap();
                 }
                 Err(_) => {
@@ -67,14 +69,22 @@ fn game_start(mut stream: TcpStream) -> Result<()> {
     });
 
     loop {
-        let mut msg = String::new();
-        io::stdin().read_line(&mut msg).unwrap();
+        let play = get_play_input();
+        let (nonce, hashed_play) = commit_to_play(&play);
+        let message = Message::HashedPlay(hashed_play);
+        let message_json_str = format!("{}\n", message.to_json_str()?);
 
-        if stream.write_all(msg.as_bytes()).is_err() {
+        if stream.write_all(message_json_str.as_bytes()).is_err() {
             println!("Failed to send message");
             break;
         }
     }
 
     Ok(())
+}
+
+fn commit_to_play(play: &Play) -> (String, String) {
+    let nonce = create_nonce();
+    let hashed_play = hash_play(play, &nonce);
+    return (nonce, hashed_play);
 }
