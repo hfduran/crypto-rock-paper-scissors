@@ -11,6 +11,7 @@ use anyhow::Result;
 use std::{
     io::{self, BufRead, BufReader, Write},
     net::{TcpListener, TcpStream},
+    sync::mpsc,
     thread,
 };
 
@@ -50,15 +51,23 @@ fn run_client() -> Result<()> {
 fn game_start(mut stream: TcpStream) -> Result<()> {
     let read_stream = stream.try_clone()?;
 
-    thread::spawn(move || {
+    // PHASE 1 - HASH EXCHANGE
+
+    let (tx, rx) = mpsc::channel::<String>();
+
+    let read_thread_handle = thread::spawn(move || {
         let buf_reader = BufReader::new(&read_stream);
         for line in buf_reader.lines() {
             match line {
                 Ok(msg) => {
-                    println!("\nThem: {}", msg);
                     let message = Message::from_json_str(&msg).unwrap();
-                    println!("{message:?}");
-                    io::stdout().flush().unwrap();
+                    match message {
+                        Message::HashedPlay(opponent_hashed_play) => {
+                            tx.send(opponent_hashed_play).unwrap();
+                            break;
+                        }
+                        _ => (),
+                    }
                 }
                 Err(_) => {
                     println!("\nConnection closed");
@@ -68,17 +77,16 @@ fn game_start(mut stream: TcpStream) -> Result<()> {
         }
     });
 
-    loop {
-        let play = get_play_input();
-        let (nonce, hashed_play) = commit_to_play(&play);
-        let message = Message::HashedPlay(hashed_play);
-        let message_json_str = format!("{}\n", message.to_json_str()?);
+    let play = get_play_input();
+    let (nonce, hashed_play) = commit_to_play(&play);
+    let message = Message::HashedPlay(hashed_play);
+    let message_json_str = format!("{}\n", message.to_json_str()?);
+    stream.write_all(message_json_str.as_bytes())?;
 
-        if stream.write_all(message_json_str.as_bytes()).is_err() {
-            println!("Failed to send message");
-            break;
-        }
-    }
+    let opponent_hashed_play = rx.recv().unwrap();
+    println!("Opponent hashed play transmitted: {}", opponent_hashed_play);
+
+    read_thread_handle.join().unwrap();
 
     Ok(())
 }
